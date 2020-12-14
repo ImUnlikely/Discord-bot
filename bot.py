@@ -11,7 +11,7 @@ TOKEN = os.getenv('DISCORD_BOT_TOKEN')
 # client = discord.Client()
 client = Bot(command_prefix = ">")
 
-reactionEmoji = "<:XDDD:748114052726652968>" # XDDD
+reactionEmoji = "<:XDDD:748114052726652968>"
 
 @client.event
 async def on_ready():
@@ -73,7 +73,7 @@ async def userinfo(ctx, *, user: discord.Member = None):
                                                                 f"**Activity:** {user.activity}", inline=False)
     embed.add_field(name="__**Server-related information:**__", value=f"**Nickname:** {user.nick}\n"
                                                                         f"**Joined server:** {user.joined_at.__format__('%A %d %B %Y at %H:%M')}\n"
-                                                                        f"**Roles:** {' '.join([r.mention for r in user.roles[1:]])}")
+                                                                        f"**Roles:** {' '.join([r.mention for r in user.roles[1:]])}") # Skips @everyone
     await ctx.send(embed=embed)
 
 
