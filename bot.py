@@ -4,6 +4,7 @@ import discord
 from discord.ext.commands import Bot
 from dotenv import load_dotenv
 from discord import utils
+from time import sleep
 
 load_dotenv()
 TOKEN = os.getenv('DISCORD_BOT_TOKEN')
@@ -35,7 +36,9 @@ async def on_message(message):
             await message.channel.send(embed=embedVar)
 
         elif 'thomas' in message.content.lower():
-            await message.channel.send(f'{message.author.mention} Thomas does not want to speak with you. Please fuck the fuck off.')
+            await message.channel.send(f'{message.author.mention} Thomas is currently in a __*meeting*__. Can I take a message?')
+            sleep(3)
+            await message.channel.send("SIKE! I won't tell him anything. He doesn't have time for your little boy problems")
 
         elif 'tommy' in message.content.lower():
             await message.channel.send("They call him Tommy99 aka Big T")
@@ -58,8 +61,6 @@ async def userinfo(ctx, *, user: discord.Member = None):
 
     if user is None:
         user = ctx.author
-
-    print(user.__str__)
 
     embed = discord.Embed(
         color = user.color,
