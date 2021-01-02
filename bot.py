@@ -5,6 +5,8 @@ from discord.ext.commands import Bot
 from dotenv import load_dotenv
 from discord import utils
 from time import sleep
+from win32api import GetSystemMetrics
+import pyautogui
 
 load_dotenv()
 TOKEN = os.getenv('DISCORD_BOT_TOKEN')
@@ -12,7 +14,15 @@ TOKEN = os.getenv('DISCORD_BOT_TOKEN')
 # client = discord.Client()
 client = Bot(command_prefix = ">")
 
+# Emojos
 reactionEmoji = "<:XDDD:748114052726652968>"
+
+# Unlikely Discord ID
+unlikely_discord_id = 138364425122873345
+
+# Resolution of screen
+screen_width = GetSystemMetrics(0)
+screen_height = GetSystemMetrics(1)
 
 @client.event
 async def on_ready():
@@ -46,6 +56,9 @@ async def on_message(message):
         if 'haha' in message.content.lower():
             await message.add_reaction(reactionEmoji)
 
+        # if "s" == message.content:
+        #     await client.logout()
+
         await client.process_commands(message)
 
 
@@ -76,6 +89,34 @@ async def userinfo(ctx, *, user: discord.Member = None):
                                                                         f"**Joined server:** {user.joined_at.__format__('%A %d %B %Y at %H:%M')}\n"
                                                                         f"**Roles:** {' '.join([r.mention for r in user.roles[1:]])}") # Skips @everyone
     await ctx.send(embed=embed)
+
+@client.command()
+async def s(ctx):
+    """Shutdown/Disconnect the bot from Discord
+
+    Args:
+        ctx (obj): message context used to identify message author
+    """
+    if ctx.author.id == unlikely_discord_id:
+        print("Bot owner called for shutdown")
+        await client.logout()
+
+@client.command()
+async def screenshot(ctx, region:str = "topleft"):
+    print(screen_width, screen_height)
+
+    if region == "topleft":
+        pass
+    elif region == "topright":
+        pass
+    elif region == "bottomleft":
+        pass
+    elif region == "bottomright":
+        pass
+
+    _sc = pyautogui.screenshot()
+
+    await ctx.send(_sc)
 
 
 client.run(TOKEN)
