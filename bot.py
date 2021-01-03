@@ -7,6 +7,8 @@ from discord import utils
 from time import sleep
 from win32api import GetSystemMetrics
 import pyautogui
+from PIL import ImageGrab
+import win32gui
 
 load_dotenv()
 TOKEN = os.getenv('DISCORD_BOT_TOKEN')
@@ -141,6 +143,28 @@ async def screenshot(ctx, region:str = "a"):
 
 
     await ctx.send(file=discord.File(r"screenshot.png")) # Send screenshot
+
+@client.command(name="ss")
+async def server_status(ctx):
+
+    toplist, winlist = [], []
+    def enum_cb(hwnd, results):
+        winlist.append((hwnd, win32gui.GetWindowText(hwnd)))
+    win32gui.EnumWindows(enum_cb, toplist)
+
+    server_window = [(hwnd, title) for hwnd, title in winlist if 'system32\cmd.exe' in title.lower()]
+    print(server_window)
+    server_window = server_window[0]
+    hwnd = server_window[0]
+    print(hwnd)
+
+    win32gui.SetForegroundWindow(hwnd)
+    bbox = win32gui.GetWindowRect(hwnd)
+    print(bbox)
+    img = ImageGrab.grab(bbox)
+    img.save("window.png")
+    
+    await ctx.send(file=discord.File(r"window.png")) # Send screenshot
 
 
 client.run(TOKEN)
