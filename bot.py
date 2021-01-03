@@ -24,6 +24,7 @@ unlikely_discord_id = 138364425122873345
 screen_width = GetSystemMetrics(0)
 screen_height = GetSystemMetrics(1)
 
+### Events
 @client.event
 async def on_ready():
     print(f'{client.user} is connected to the following guilds:')
@@ -62,6 +63,7 @@ async def on_message(message):
         await client.process_commands(message)
 
 
+### Commands
 @client.command()
 async def userinfo(ctx, *, user: discord.Member = None):
     """
