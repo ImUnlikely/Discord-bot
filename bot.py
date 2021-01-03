@@ -91,7 +91,7 @@ async def userinfo(ctx, *, user: discord.Member = None):
     await ctx.send(embed=embed)
 
 @client.command()
-async def s(ctx):
+async def shutdown(ctx):
     """Shutdown/Disconnect the bot from Discord
 
     Args:
@@ -102,21 +102,55 @@ async def s(ctx):
         await client.logout()
 
 @client.command()
-async def screenshot(ctx, region:str = "topleft"):
-    print(screen_width, screen_height)
+async def screenshot(ctx, region:str = "a"):
+    """Take a screenshot and send it as a message
 
-    if region == "topleft":
-        pass
-    elif region == "topright":
-        pass
-    elif region == "bottomleft":
-        pass
-    elif region == "bottomright":
-        pass
+    Args:
+        ctx (obj): Message context
+        region (str, optional): Screen region to capture. Defaults to "a" (all).
 
-    _sc = pyautogui.screenshot()
+    Raises:
+        NotImplementedError: Function that is not implemented
+    """
 
-    await ctx.send(_sc)
+    region = region.lower() # Convert to lowercase
+
+    # Get screenshot of region
+
+    # Whole screen
+    if region == "a":
+        pyautogui.screenshot(r"screenshot.png") # Take screenshot and save to file
+
+    # Left side
+    elif region == "l":
+        # Start at 0,0
+        # Get half the screen width and entire height
+        pyautogui.screenshot(r"screenshot.png", region=(0,0, screen_width/2, screen_height))
+
+    # Right side
+    elif region == "r": 
+        # Start top middle
+        # Get the rest of right side and entire height
+        pyautogui.screenshot(r"screenshot.png", region=(screen_width/2,0, screen_width/2, screen_height))
+    
+    # Top left
+    elif region == "tl":
+        raise NotImplementedError()
+    
+    # Top right
+    elif region == "tr":
+        raise NotImplementedError()
+
+    # Bottom left
+    elif region == "bl":
+        raise NotImplementedError()
+
+    # Bottom right
+    elif region == "br":
+        raise NotImplementedError()
+
+
+    await ctx.send(file=discord.File(r"screenshot.png")) # Send screenshot
 
 
 client.run(TOKEN)
