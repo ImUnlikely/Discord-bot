@@ -1,14 +1,16 @@
 import os
-
 import discord
+from discord import utils
 from discord.ext.commands import Bot
 from dotenv import load_dotenv
-from discord import utils
 from time import sleep
-from win32api import GetSystemMetrics
 import pyautogui
-from PIL import ImageGrab
+from PIL import Image
+import win32api
+from win32api import GetSystemMetrics
+import win32con
 import win32gui
+import win32ui
 
 load_dotenv()
 TOKEN = os.getenv('DISCORD_BOT_TOKEN')
@@ -93,78 +95,78 @@ async def shutdown(ctx):
         print("Bot owner called for shutdown")
         await client.logout()
 
-@client.command()
-async def screenshot(ctx, region:str = "a"):
-    """Take a screenshot and send it as a message
+@client.command(name="ss", )
+async def screenshot(ctx, monitor:int=None):
+    """Takes and sends a screenshot of any given monitor. Sends screenshot of all monitors if nothing is specified
 
     Args:
-        ctx (obj): Message context
-        region (str, optional): Screen region to capture. Defaults to "a" (all).
-
-    Raises:
-        NotImplementedError: Function that is not implemented
+        ctx (obj): The message context
+        monitor (int, optional): The monitor to screenshot (from 1 and up). Defaults to None.
     """
 
-    region = region.lower() # Convert to lowercase
+    def get_monitor_bbox(monitor:int=None):
+        """Gets specified monitor bounding box (assumes monitors are 1920x1080)
 
-    # Get screenshot of region
+        Args:
+            monitor (int, optional): The monitor to screenshot (from 1 and up). Defaults to None.
 
-    # Whole screen
-    if region == "a":
-        pyautogui.screenshot(r"screenshot.png") # Take screenshot and save to file
+        Returns:
+            w, h, l, t: The resolution and starting coordinates of any given monitor
+        """
+        SM_XVIRTUALSCREEN = 76
+        SM_YVIRTUALSCREEN = 77
+        SM_CXVIRTUALSCREEN = 78
+        SM_CYVIRTUALSCREEN = 79
+        w = vscreenwidth = win32api.GetSystemMetrics(SM_CXVIRTUALSCREEN)
+        h = vscreenheigth = win32api.GetSystemMetrics(SM_CYVIRTUALSCREEN)
+        l = vscreenx = win32api.GetSystemMetrics(SM_XVIRTUALSCREEN)
+        t = vscreeny = win32api.GetSystemMetrics(SM_YVIRTUALSCREEN)
 
-    # Left side
-    elif region == "l":
-        # Start at 0,0
-        # Get half the screen width and entire height
-        pyautogui.screenshot(r"screenshot.png", region=(0,0, screen_width/2, screen_height))
+        if monitor is None:
+            return w, h, l, t
 
-    # Right side
-    elif region == "r": 
-        # Start top middle
-        # Get the rest of right side and entire height
-        pyautogui.screenshot(r"screenshot.png", region=(screen_width/2,0, screen_width/2, screen_height))
+        ## Assumes monitor is 1920 pixels wide
+        monitors_start = []
+        # _is_negative = True if w<0 else False
+        for _ in range(1, (w//1920)+1):
+            monitors_start.append(l)
+            l += 1920
+        print(monitors_start)
+
+        l = monitors_start[monitor-1]
+
+        return int(w/len(monitors_start)), h, l, t
+
+    w, h, l, t = get_monitor_bbox(monitor)
+    print(w, h, l, t)
+
+    # Get virtual screen
+    hwnd = win32gui.GetDesktopWindow()
+
+    hwndDC = win32gui.GetWindowDC(hwnd)
+    mfcDC  = win32ui.CreateDCFromHandle(hwndDC)
+    saveDC = mfcDC.CreateCompatibleDC()
+
+    # Create bitmap
+    saveBitMap = win32ui.CreateBitmap()
+    saveBitMap.CreateCompatibleBitmap(mfcDC, w, h)
+    saveDC.SelectObject(saveBitMap)
+    saveDC.BitBlt((0, 0), (w, h),  mfcDC,  (l, t),  win32con.SRCCOPY)
+
+    # Save bitmap
+    bmpinfo = saveBitMap.GetInfo()
+    bmpstr = saveBitMap.GetBitmapBits(True)
+
+    # Save image
+    im = Image.frombuffer('RGB', (bmpinfo['bmWidth'], bmpinfo['bmHeight']), bmpstr, 'raw', 'BGRX', 0, 1)
+    im.save('screencapture.png', format = 'png')
     
-    # Top left
-    elif region == "tl":
-        raise NotImplementedError()
-    
-    # Top right
-    elif region == "tr":
-        raise NotImplementedError()
+    # Send message and image
+    if monitor is None:
+        await ctx.send(content=f"All monitors @{w}x{h}, {l},{t}", file=discord.File(r"screencapture.png"))
+    else:
+        await ctx.send(content=f"Monitor {monitor} @{w}x{h}, {l},{t}", file=discord.File(r"screencapture.png"))
 
-    # Bottom left
-    elif region == "bl":
-        raise NotImplementedError()
-
-    # Bottom right
-    elif region == "br":
-        raise NotImplementedError()
-
-
-    await ctx.send(file=discord.File(r"screenshot.png")) # Send screenshot
-
-@client.command(name="ss")
-async def server_status(ctx):
-
-    toplist, winlist = [], []
-    def enum_cb(hwnd, results):
-        winlist.append((hwnd, win32gui.GetWindowText(hwnd)))
-    win32gui.EnumWindows(enum_cb, toplist)
-
-    server_window = [(hwnd, title) for hwnd, title in winlist if 'system32\cmd.exe' in title.lower()]
-    print(server_window)
-    server_window = server_window[0]
-    hwnd = server_window[0]
-    print(hwnd)
-
-    win32gui.SetForegroundWindow(hwnd)
-    bbox = win32gui.GetWindowRect(hwnd)
-    print(bbox)
-    img = ImageGrab.grab(bbox)
-    img.save("window.png")
-    
-    await ctx.send(file=discord.File(r"window.png")) # Send screenshot
 
 
 client.run(TOKEN)
