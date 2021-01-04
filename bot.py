@@ -127,7 +127,6 @@ async def screenshot(ctx, monitor:int=None):
 
         ## Assumes monitor is 1920 pixels wide
         monitors_start = []
-        # _is_negative = True if w<0 else False
         for _ in range(1, (w//1920)+1):
             monitors_start.append(l)
             l += 1920
