@@ -190,14 +190,13 @@ async def screenshot(ctx, monitor:int=None, message:str=None):
             await ctx.send(content=f"{message}Monitor {monitor} @{w}x{h}, {l},{t}", file=discord.File(r"screencapture.png"))
 
 @client.command("server")
-async def server(ctx, command:str="status", *args):
-    command = command.lower()
+async def server(ctx, *args):
+    command = args[0].lower()
 
     print(args)
 
-    if command == "status":
-        # server_status()
-        await server_status(ctx, *args)
+    if command == "console":
+        await server_console(ctx, *args)
 
     elif command == "start":
         # server_start() (TODO)
@@ -290,9 +289,9 @@ def window_prepare_for_screenshot(hwnd):
 def window_restore_from_pre_screenshot(hwnd):
     win32gui.ShowWindow(hwnd,1)
 
-async def server_status(ctx, *args):
+async def server_console(ctx, *args):
     """Send a message containing the status of the server (online/offline)
-        add system resources used in message later (TODO)
+    and a screenshot of the console window
     """
 
     # Check if server is running. Gets status and window handle
