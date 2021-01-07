@@ -14,7 +14,6 @@ from win32api import GetSystemMetrics
 import win32con
 import win32gui
 import win32ui
-import re
 
 ### Search for tags
 # (TBD) - To be determined
@@ -33,7 +32,16 @@ emoji_xddd = "<:XDDD:748114052726652968>"
 screen_width = GetSystemMetrics(0)
 screen_height = GetSystemMetrics(1)
 
-### Events
+# Bot owner ID:
+owner_id = 138364425122873345
+
+
+
+
+########################################################
+######################## Events ########################
+########################################################
+
 @client.event
 async def on_ready():
     print(f'{client.user} is connected to the following guilds:')
@@ -64,7 +72,11 @@ async def on_message(message):
         await client.process_commands(message)
 
 
-### Commands
+
+##########################################################
+######################## Commands ########################
+##########################################################
+
 @client.command()
 async def userinfo(ctx, *, user: discord.Member = None):
     """
@@ -101,10 +113,7 @@ async def shutdown(ctx):
         ctx (obj): message context used to identify message author
     """
 
-    ## (TODO)
-    # This 'is_owner' method does not work
-    # Replace logic with previous hardcoded owner ID
-    if is_owner() is True:
+    if ctx.author.id == owner_id:
         print("Bot owner called for shutdown")
         await client.logout()
     else:
@@ -185,6 +194,8 @@ async def screenshot(ctx, monitor:int=None, message:str=None):
 async def server(ctx, command:str="status", *args):
     command = command.lower()
 
+    print(args)
+
     if command == "status":
         # server_status()
         await server_status(ctx, *args)
@@ -205,7 +216,12 @@ async def server(ctx, command:str="status", *args):
         await server_stop(ctx)
 
 
-### Functions
+
+
+###########################################################
+######################## Functions ########################
+###########################################################
+
 def is_server_running():
     """Checks if server is running or not by looking for system window
 
@@ -353,6 +369,7 @@ def get_emote(emoji):
     :return:
     :rtype: (str, int)
     """
+    import re
     lookup, eid = emoji, None
     if ':' in emoji:
         # matches custom emote
