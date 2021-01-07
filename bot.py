@@ -182,12 +182,12 @@ async def screenshot(ctx, monitor:int=None, message:str=None):
             await ctx.send(content=f"{message}Monitor {monitor} @{w}x{h}, {l},{t}", file=discord.File(r"screencapture.png"))
 
 @client.command("server")
-async def server(ctx, command:str="status"):
+async def server(ctx, command:str="status", *args):
     command = command.lower()
 
     if command == "status":
         # server_status()
-        await server_status(ctx)
+        await server_status(ctx, *args)
 
     elif command == "start":
         # server_start() (TODO)
@@ -256,15 +256,26 @@ def determine_monitor(x1, x2, w, l):
     
     return monitor
 
-def show_window(hwnd):
-    win32gui.ShowWindow(hwnd,6) # Minimize
-    sleep(0.05)
-    win32gui.ShowWindow(hwnd,9) # Un-minimize
-    # sleep(0.05)
-    # win32gui.ShowWindow(hwnd,5) # Show
-    sleep(0.2)
+def window_prepare_for_screenshot(hwnd):
+    win32gui.ShowWindow(hwnd, 6) # Minimize
+    win32gui.ShowWindow(hwnd, 3) # Fullscreen
 
-async def server_status(ctx):
+    # win32gui.ShowWindow(hwnd,0) # Closes window fully (but can still be recovered by 1)
+    # win32gui.ShowWindow(hwnd,1) # Brings window to front (recovers window from 0)
+    # win32gui.ShowWindow(hwnd,2) # Minimize (hide)
+    # win32gui.ShowWindow(hwnd,3) # Fullscreen (not toggle, brings window to front if hidden)
+    # win32gui.ShowWindow(hwnd,4) # Exit fullscreen (brings window to front if hidden)
+    # win32gui.ShowWindow(hwnd,5) # Nothing?
+    # win32gui.ShowWindow(hwnd,6) # Minimize (hide window)
+    # win32gui.ShowWindow(hwnd,7) # Minimize (hide window)
+    # win32gui.ShowWindow(hwnd,8) # Nothing?
+    # win32gui.ShowWindow(hwnd,9) # Un-minimize
+    # win32gui.ShowWindow(hwnd,10) # Small window in front (brings window to front if not visible and exits fullscreen if in fullscreen)
+
+def window_restore_from_pre_screenshot(hwnd):
+    win32gui.ShowWindow(hwnd,1)
+
+async def server_status(ctx, *args):
     """Send a message containing the status of the server (online/offline)
         add system resources used in message later (TODO)
     """
@@ -278,12 +289,12 @@ async def server_status(ctx):
     if _status == True:
         message = "Window was located.\n"
         message += "Server is running.\n"
-        try:
-            show_window(hwnd)
-        except Exception as ex:
-            await ctx.send(content=f"{message}Could not set console window to foreground, got error: {ex}.\nSending screenshot regardless...")
 
         w, h, l, t = get_screen_resolution()
+
+        if "fullscreen" in args:
+            window_prepare_for_screenshot(hwnd)
+            sleep(0.2)
 
         x1, y1, x2, y2 = bbox = win32gui.GetWindowRect(hwnd)
         print("Console window bbox:", bbox)
@@ -291,7 +302,9 @@ async def server_status(ctx):
         monitor = determine_monitor(x1, x2, w, l)
         message += f"Console Window location: {bbox}.\n"
         try:
-            await screenshot(ctx=ctx, monitor=monitor, message=message)
+            await screenshot(ctx=ctx, monitor=monitor, message=message) # Take and send screenshot
+            if "fullscreen" in args:
+                window_restore_from_pre_screenshot(hwnd) # Restore window position
         except Exception as ex:
             await ctx.send(content=f"{message}Could not send screenshot because of error: {ex}")
 
