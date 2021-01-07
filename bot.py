@@ -290,17 +290,22 @@ async def server_status(ctx, *args):
         message = "Window was located.\n"
         message += "Server is running.\n"
 
+        # Get screen details
         w, h, l, t = get_screen_resolution()
 
-        if "fullscreen" in args:
-            window_prepare_for_screenshot(hwnd)
-            sleep(0.2)
-
+        # Get window details
         x1, y1, x2, y2 = bbox = win32gui.GetWindowRect(hwnd)
         print("Console window bbox:", bbox)
-
         monitor = determine_monitor(x1, x2, w, l)
-        message += f"Console Window location: {bbox}.\n"
+        
+
+        if "fullscreen" in args:
+            message += f"Console Window location: Monitor {monitor}.\n"
+            window_prepare_for_screenshot(hwnd)
+            sleep(0.2)
+        else:
+            message += f"Console Window location: {bbox}.\n"
+
         try:
             await screenshot(ctx=ctx, monitor=monitor, message=message) # Take and send screenshot
             if "fullscreen" in args:
