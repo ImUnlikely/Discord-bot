@@ -14,6 +14,7 @@ from win32api import GetSystemMetrics
 import win32con
 import win32gui
 import win32ui
+import re
 
 ### Search for tags
 # (TBD) - To be determined
@@ -26,7 +27,7 @@ TOKEN = os.getenv('DISCORD_BOT_TOKEN')
 client = Bot(command_prefix = ">")
 
 # Emojos
-reactionEmoji = "<:XDDD:748114052726652968>"
+emoji_xddd = "<:XDDD:748114052726652968>"
 
 # Resolution of screen
 screen_width = GetSystemMetrics(0)
@@ -54,7 +55,11 @@ async def on_message(message):
             await message.channel.send("They call him Tommy99 aka Big T")
 
         if 'haha' in message.content.lower():
-            await message.add_reaction(reactionEmoji)
+            await message.add_reaction(emoji_xddd)
+
+        if message.author.id == 243846951005716480:
+            await message.add_reaction("🕖")
+
 
         await client.process_commands(message)
 
@@ -123,14 +128,8 @@ async def screenshot(ctx, monitor:int=None, message:str=None):
         Returns:
             w, h, l, t: The resolution and starting coordinates of any given monitor
         """
-        SM_XVIRTUALSCREEN = 76
-        SM_YVIRTUALSCREEN = 77
-        SM_CXVIRTUALSCREEN = 78
-        SM_CYVIRTUALSCREEN = 79
-        w = vscreenwidth = win32api.GetSystemMetrics(SM_CXVIRTUALSCREEN)
-        h = vscreenheigth = win32api.GetSystemMetrics(SM_CYVIRTUALSCREEN)
-        l = vscreenx = win32api.GetSystemMetrics(SM_XVIRTUALSCREEN)
-        t = vscreeny = win32api.GetSystemMetrics(SM_YVIRTUALSCREEN)
+
+        w, h, l, t = get_screen_resolution()
 
         if monitor is None:
             return w, h, l, t
@@ -182,78 +181,29 @@ async def screenshot(ctx, monitor:int=None, message:str=None):
         else:
             await ctx.send(content=f"{message}Monitor {monitor} @{w}x{h}, {l},{t}", file=discord.File(r"screencapture.png"))
 
-@client.command(name="server_start")
-async def start_server(ctx): 
-    """Launches server if it is not running
-
-    Args:
-        ctx (obj): message context
-    """
-
-    ### (TODO)
-    # Dismantle this function and make multiple, smaller functions
-
-    # Check if server is running. Gets status and window handle
-    # Assumes server window is the only window with 'system32\cmd.exe' in its name
-    _status, hwnd = is_server_running()
-    print(hwnd)
-
-    # If server is running
-    if _status == True:
-        message = "Server already running.\n"
-        message += "Window was located.\n"
-        try:
-            show_window(hwnd)
-        except Exception as er:
-            await ctx.send(content=f"{message}Could not set console window to foreground, got error: {er}.\nSending screenshot regardless...")
-
-        # Get screen resolution
-        # (TODO)
-        # This should be made as an independant function at the bottom
-        # Same exact code is repeated in another command
-        SM_XVIRTUALSCREEN = 76
-        SM_YVIRTUALSCREEN = 77
-        SM_CXVIRTUALSCREEN = 78
-        SM_CYVIRTUALSCREEN = 79
-        w = vscreenwidth = win32api.GetSystemMetrics(SM_CXVIRTUALSCREEN)
-        h = vscreenheigth = win32api.GetSystemMetrics(SM_CYVIRTUALSCREEN)
-        l = vscreenx = win32api.GetSystemMetrics(SM_XVIRTUALSCREEN)
-        t = vscreeny = win32api.GetSystemMetrics(SM_YVIRTUALSCREEN)
-
-        x1, y1, x2, y2 = bbox = win32gui.GetWindowRect(hwnd)
-        print("Console window bbox:", bbox)
-
-        monitor = determine_monitor(x1, x2, w, l)
-        message += f"Console Window location: {bbox}.\n"
-        try:
-            await screenshot(ctx=ctx, monitor=monitor, message=message)
-        except Exception as er:
-            await ctx.send(content=f"{message}Could not send screenshot because of error: {er}")
-        
-    else:
-        print("Starting server...")
-        pyautogui.hotkey("win","r")
-        sleep(0.4)
-        pyautogui.typewrite("cmd\n")
-        sleep(0.5)
-        await ctx.send(content=f"This function has not yet been implemented")
-
 @client.command("server")
 async def server(ctx, command:str="status"):
     command = command.lower()
 
     if command == "status":
-        # server_status() (TODO)
-        raise NotImplementedError()
+        # server_status()
+        await server_status(ctx)
+
     elif command == "start":
         # server_start() (TODO)
         raise NotImplementedError()
+        await server_start(ctx)
+
     elif command == "save":
         # server_start() (TODO)
         raise NotImplementedError()
+        await server_save(ctx)
+
     elif command == "stop":
         # server_stop() (TODO)
         raise NotImplementedError()
+        await server_stop(ctx)
+
 
 ### Functions
 def is_server_running():
@@ -314,15 +264,55 @@ def show_window(hwnd):
     # win32gui.ShowWindow(hwnd,5) # Show
     sleep(0.2)
 
-def server_status(ctx): # (TODO)
+async def server_status(ctx):
     """Send a message containing the status of the server (online/offline)
         add system resources used in message later (TODO)
     """
+
+    # Check if server is running. Gets status and window handle
+    # Assumes server window is the only window with 'system32\cmd.exe' in its name
+    _status, hwnd = is_server_running()
+    print(hwnd)
+
+    # If server is running
+    if _status == True:
+        message = "Window was located.\n"
+        message += "Server is running.\n"
+        try:
+            show_window(hwnd)
+        except Exception as ex:
+            await ctx.send(content=f"{message}Could not set console window to foreground, got error: {ex}.\nSending screenshot regardless...")
+
+        w, h, l, t = get_screen_resolution()
+
+        x1, y1, x2, y2 = bbox = win32gui.GetWindowRect(hwnd)
+        print("Console window bbox:", bbox)
+
+        monitor = determine_monitor(x1, x2, w, l)
+        message += f"Console Window location: {bbox}.\n"
+        try:
+            await screenshot(ctx=ctx, monitor=monitor, message=message)
+        except Exception as ex:
+            await ctx.send(content=f"{message}Could not send screenshot because of error: {ex}")
+
+    else:
+        await ctx.send(content=f"Server window could not be located. Server is not running")
+
     return None
 
 def server_start(): # (TODO)
     """Start the server if it is not running
     """
+
+    print("Starting server...")
+
+    # open cmd
+    pyautogui.hotkey("win","r")
+    sleep(0.4)
+    pyautogui.typewrite("cmd\n")
+    sleep(0.5)
+
+
     return None
 
 def server_save(): # (TODO)
@@ -337,6 +327,43 @@ def server_stop(): # (TODO)
     """
     return None    
 
+def get_emote(emoji):
+    """
+    Gets a specific emote by lookup.
+    :param emoji: The emote to get.
+    :type emoji: str or discord.Emoji
+    :return:
+    :rtype: (str, int)
+    """
+    lookup, eid = emoji, None
+    if ':' in emoji:
+        # matches custom emote
+        server_match = re.search(r'<a?:(\w+):(\d+)>', emoji)
+        # matches global emote
+        custom_match = re.search(r':(\w+):', emoji)
+        if server_match:
+            lookup, eid = server_match.group(1), server_match.group(2)
+        elif custom_match:
+            lookup, eid = custom_match.group(1), None
+        else:
+            lookup, eid = emoji.split(':')
+        try:
+            eid = int(eid)
+        except (ValueError, TypeError):
+            eid = None
+    return lookup, eid
+
+def get_screen_resolution():
+    SM_XVIRTUALSCREEN = 76
+    SM_YVIRTUALSCREEN = 77
+    SM_CXVIRTUALSCREEN = 78
+    SM_CYVIRTUALSCREEN = 79
+    vscreenwidth = win32api.GetSystemMetrics(SM_CXVIRTUALSCREEN)
+    vscreenheigth = win32api.GetSystemMetrics(SM_CYVIRTUALSCREEN)
+    vscreenx = win32api.GetSystemMetrics(SM_XVIRTUALSCREEN)
+    vscreeny = win32api.GetSystemMetrics(SM_YVIRTUALSCREEN)
+
+    return vscreenwidth, vscreenheigth, vscreenx, vscreeny
 
 
 client.run(TOKEN)
