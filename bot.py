@@ -3,7 +3,6 @@ import os
 import discord
 from discord import utils
 from discord.ext.commands import Bot
-from discord.ext.commands.core import is_owner
 from dotenv import load_dotenv
 from time import sleep
 # import pyautogui
