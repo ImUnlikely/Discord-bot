@@ -1,18 +1,19 @@
-from logging import error
+from ctypes.wintypes import PULARGE_INTEGER
+import logging
 import os
 import discord
 from discord import utils
 from discord.ext.commands import Bot
 from dotenv import load_dotenv
 from time import sleep
-# import pyautogui
+import pyautogui
 from PIL import Image
 import pyautogui
 import win32api
-from win32api import GetSystemMetrics
 import win32con
 import win32gui
 import win32ui
+from statistics import median
 
 ### Search for tags
 # (TBD) - To be determined
@@ -27,13 +28,11 @@ client = Bot(command_prefix = ">")
 # Emojos
 emoji_xddd = "<:XDDD:748114052726652968>"
 
-# Resolution of screen
-screen_width = GetSystemMetrics(0)
-screen_height = GetSystemMetrics(1)
-
 # Bot owner ID:
-owner_id = 138364425122873345
+OWNER_ID = 138364425122873345
 
+# Server window name
+SERVER_WINDOW_NAME = r"system32\cmd.exe"
 
 
 
@@ -112,91 +111,40 @@ async def shutdown(ctx):
         ctx (obj): message context used to identify message author
     """
 
-    if ctx.author.id == owner_id:
+    if ctx.author.id == OWNER_ID:
         print("Bot owner called for shutdown")
         await client.logout()
     else:
         print("Only the owner can shut down the bot via that command!")
 
-@client.command(name="ss")
-async def screenshot(ctx, monitor:int=None, message:str=None):
-    """Takes and sends a screenshot of any given monitor. Sends screenshot of all monitors if nothing is specified
-
-    Args:
-        ctx (obj): The message context
-        monitor (int, optional): The monitor to screenshot (from 1 and up). Defaults to None.
-    """
-
-    def get_monitor_bbox(monitor:int=None):
-        """Gets specified monitor bounding box (assumes monitors are 1920x1080)
-
-        Args:
-            monitor (int, optional): The monitor to screenshot (from 1 and up). Defaults to None.
-
-        Returns:
-            w, h, l, t: The resolution and starting coordinates of any given monitor
-        """
-
-        w, h, l, t = get_screen_resolution()
-
-        if monitor is None:
-            return w, h, l, t
-
-        ## Assumes monitor is 1920 pixels wide
-        monitors_start = []
-        for _ in range(1, (w//1920)+1):
-            monitors_start.append(l)
-            l += 1920
-        print(monitors_start)
-
-        l = monitors_start[monitor-1]
-
-        return int(w/len(monitors_start)), h, l, t
-
-    w, h, l, t = get_monitor_bbox(monitor)
-    print(w, h, l, t)
-
-    # Get virtual screen
-    hwnd = win32gui.GetDesktopWindow()
-
-    hwndDC = win32gui.GetWindowDC(hwnd)
-    mfcDC  = win32ui.CreateDCFromHandle(hwndDC)
-    saveDC = mfcDC.CreateCompatibleDC()
-
-    # Create bitmap
-    saveBitMap = win32ui.CreateBitmap()
-    saveBitMap.CreateCompatibleBitmap(mfcDC, w, h)
-    saveDC.SelectObject(saveBitMap)
-    saveDC.BitBlt((0, 0), (w, h),  mfcDC,  (l, t),  win32con.SRCCOPY)
-
-    # Save bitmap
-    bmpinfo = saveBitMap.GetInfo()
-    bmpstr = saveBitMap.GetBitmapBits(True)
-
-    # Save image
-    im = Image.frombuffer('RGB', (bmpinfo['bmWidth'], bmpinfo['bmHeight']), bmpstr, 'raw', 'BGRX', 0, 1)
-    im.save('screencapture.png', format = 'png')
+@client.command(name="screenshot")
+async def screenshot(ctx, monitor:int=None):
+    w, h, l, t = get_bbox_monitor(monitor)
+    img = screen_capture(w, h, l, t)
     
     # Send message and image
-    if message is None:
-        if monitor is None:
-            await ctx.send(content=f"All monitors @{w}x{h}, {l},{t}", file=discord.File(r"screencapture.png"))
-        else:
-            await ctx.send(content=f"Monitor {monitor} @{w}x{h}, {l},{t}", file=discord.File(r"screencapture.png"))
+    if monitor is None:
+        await ctx.send(content=f"All monitors", file=img)
     else:
-        if monitor is None:
-            await ctx.send(content=f"{message}All monitors @{w}x{h}, {l},{t}", file=discord.File(r"screencapture.png"))
-        else:
-            await ctx.send(content=f"{message}Monitor {monitor} @{w}x{h}, {l},{t}", file=discord.File(r"screencapture.png"))
+        await ctx.send(content=f"Monitor {monitor}", file=img)
 
 @client.command("server")
 async def server(ctx, *args):
     command = args[0].lower()
 
-    print(args)
+    print(f"Server command invoked, args: {args}")
 
     if command == "console":
-        await server_console(ctx, *args)
+        await server_console(ctx, *args[1:])
+
+    elif command == "view":
+        hwnd = get_hwnd(SERVER_WINDOW_NAME)
+        console_img = window_capture(hwnd)
+
+        if console_img is None:
+            await ctx.send(content="Could not get console window")
+        else:
+            await ctx.send(file=console_img)
 
     elif command == "start":
         # server_start() (TODO)
@@ -212,7 +160,11 @@ async def server(ctx, *args):
         # server_stop() (TODO)
         raise NotImplementedError()
         await server_stop(ctx)
-
+    
+    elif command == "crashcheck" or command == "crashtest":
+        crash = await crashcheck(ctx)
+        if crash is False:
+            await ctx.send(content="Server is running and survived crashtest", file=discord.File(r"screencapture.png"))
 
 
 
@@ -220,55 +172,152 @@ async def server(ctx, *args):
 ######################## Functions ########################
 ###########################################################
 
-def is_server_running():
-    """Checks if server is running or not by looking for system window
+def screen_capture(width, height, left, top):
+    img = None
 
-    Returns:
-        bool, hwnd: Boolean for whether or not the server is running, hwnd for the window if it exists
-    """
+    if width == height == left == top == 0:
+        width, height, left, top = get_screen_resolution()
+    try:
+        print(width, type(width))
+        print(height, type(height))
+        print(left, type(left))
+        print(top, type(top))
+
+        hwin = win32gui.GetDesktopWindow()
+        hwindc = win32gui.GetWindowDC(hwin)
+        srcdc = win32ui.CreateDCFromHandle(hwindc)
+        memdc = srcdc.CreateCompatibleDC()
+        bmp = win32ui.CreateBitmap()
+        bmp.CreateCompatibleBitmap(srcdc, width, height)
+        memdc.SelectObject(bmp)
+        memdc.BitBlt((0, 0), (width, height), srcdc, (left, top), win32con.SRCCOPY)
+        bmpinfo = bmp.GetInfo()
+        bmpstr = bmp.GetBitmapBits(True)
+        im = Image.frombuffer('RGB', (bmpinfo['bmWidth'], bmpinfo['bmHeight']), bmpstr, 'raw', 'BGRX', 0, 1)
+        im.save('screencapture.png', format = 'png')
+        img = get_screenshot(r"screencapture.png")
+    except Exception as ex:
+        logging.error(f"Could not take screenshot because {ex}")
+    return img
+
+
+def window_capture(hwnd:int, visible:bool=False):
+    img = None
+
+    try:
+        l, t, r, b = get_bbox_hwnd(hwnd)
+        w = r - l
+        h = b - t
+        print("window_capture:", l, t, r, b, w, h)
+        hwin = win32gui.GetDesktopWindow()
+        hwindc = win32gui.GetWindowDC(hwin)
+        srcdc = win32ui.CreateDCFromHandle(hwindc)
+        memdc = srcdc.CreateCompatibleDC()
+        bmp = win32ui.CreateBitmap()
+        bmp.CreateCompatibleBitmap(srcdc, w, h)
+        memdc.SelectObject(bmp)
+        if visible is False:
+            window_set_foreground(hwnd)
+        memdc.BitBlt((0, 0), (w, h), srcdc, (l, t), win32con.SRCCOPY)
+        bmpinfo = bmp.GetInfo()
+        bmpstr = bmp.GetBitmapBits(True)
+        im = Image.frombuffer('RGB', (bmpinfo['bmWidth'], bmpinfo['bmHeight']), bmpstr, 'raw', 'BGRX', 0, 1)
+        im.save('screencapture.png', format = 'png')
+        img = get_screenshot(r"screencapture.png")
+    except Exception as ex:
+        logging.error(f"Could not take screenshot because {ex}")
+    return img
+
+
+def get_screenshot(path:str=r"screencapture.png"):
+    img = None
+    try:
+        img = discord.File(path)
+    except Exception as ex:
+        logging.error(f"Could not get image from path '{path}'. Got {ex}")
+    return img
+
+
+def window_set_foreground(hwnd):
+    win32gui.ShowWindow(hwnd,6) # Minimize (hide window)
+    win32gui.ShowWindow(hwnd,9) # Un-minimize
+    sleep(0.2)
+
+
+def get_bbox_hwnd(hwnd:int=None):
+    # Get the bbox of given window handle or monitor
+    bbox = None
+
+    try:
+        bbox = win32gui.GetWindowRect(hwnd) # x1, y1, x2, y2 
+    except Exception as ex:
+        logging.error(f"Could not get bbox for hwnd '{hwnd}'. Got {ex}")
+
+    return bbox
+
+
+def get_bbox_monitor(monitor:int=None):
+        w, h, l, t = bbox = get_screen_resolution()
+
+        if monitor is None:
+            return bbox
+
+        ## Assumes monitor is 1920 pixels wide
+        monitors_start = []
+        for _ in range(1, (w//1920)+1):
+            monitors_start.append(l)
+            l += 1920
+
+        l = monitors_start[monitor-1]
+
+        return int(w/len(monitors_start)), h, l, t
+
+
+def get_hwnd(window_name:str="system32\cmd.exe"):
+    # Get window handle of given window name
+    hwnd = None
 
     toplist, winlist = [], []
     def enum_cb(hwnd, results):
         winlist.append((hwnd, win32gui.GetWindowText(hwnd)))
     win32gui.EnumWindows(enum_cb, toplist)
 
-    server_window = [(hwnd, title) for hwnd, title in winlist if 'system32\cmd.exe' in title.lower()]
-    if len(server_window) == 0:
-        return False, None
+    windows = [(hwnd, title) for hwnd, title in winlist if window_name in title.lower()]
+
+    try:
+        hwnd = windows[0][0]
+    except Exception as ex:
+        logging.error(f"Could not get window handle (hwnd) for {window_name}. Because {ex}")
+
+    if len(windows) == 0:
+        return hwnd
     else:
-        return True, server_window[0][0]
+        return hwnd
 
-def determine_monitor(x1, x2, w, l):
-    """Tries to determine which monitor any given window is located on
 
-    Args:
-        x1 (int): x coordinate 1
-        x2 (int): x coordinate 2
-        w (int): width of all monitors together
-        l (int): monitor start coordinate
-
-    Returns:
-        (int): Integer representing the monitor on which the window is located
-    """
-
+def get_monitor(window_x1, window_x2, screen_width, screen_start):
+    # Get monitor number given a bbox
     monitor = None
-
+    
     ## Assumes monitor is 1920 pixels wide
     monitors_start = []
-    for _ in range(1, (w//1920)+2):
-        monitors_start.append(l)
-        l += 1920
+    for _ in range(1, (screen_width//1920)+2):
+        monitors_start.append(screen_start)
+        screen_start += 1920
 
     try:
         for index, xVal in enumerate(monitors_start):
-            if x1 in range(xVal, monitors_start[index+1]) and x2 in range(xVal, monitors_start[index+1]):
+            if window_x1 in range(xVal, monitors_start[index+1]) and \
+                window_x2 in range(xVal, monitors_start[index+1]):
                 monitor = index+1
-                print("Server window found on monitor", monitor)
                 return monitor
-    except Exception as ex:
-        print("Could not find window on any monitor")
-    
+    except Exception:
+        if window_x1 == -1928 and window_x2 == -8 or \
+            window_x1 == -1928 and window_x2 == 8:
+            return 1
+
     return monitor
+
 
 def window_prepare_for_screenshot(hwnd):
     win32gui.ShowWindow(hwnd, 6) # Minimize
@@ -286,78 +335,23 @@ def window_prepare_for_screenshot(hwnd):
     # win32gui.ShowWindow(hwnd,9) # Un-minimize
     # win32gui.ShowWindow(hwnd,10) # Small window in front (brings window to front if not visible and exits fullscreen if in fullscreen)
 
+
 def window_restore_from_pre_screenshot(hwnd):
     win32gui.ShowWindow(hwnd,1)
 
-async def server_console(ctx, *args):
-    """Send a message containing the status of the server (online/offline)
-    and a screenshot of the console window
-    """
 
-    # Check if server is running. Gets status and window handle
-    # Assumes server window is the only window with 'system32\cmd.exe' in its name
-    _status, hwnd = is_server_running()
-    print(hwnd)
+def get_screen_resolution():
+    SM_XVIRTUALSCREEN = 76
+    SM_YVIRTUALSCREEN = 77
+    SM_CXVIRTUALSCREEN = 78
+    SM_CYVIRTUALSCREEN = 79
+    w = win32api.GetSystemMetrics(SM_CXVIRTUALSCREEN)
+    h = win32api.GetSystemMetrics(SM_CYVIRTUALSCREEN)
+    l = win32api.GetSystemMetrics(SM_XVIRTUALSCREEN)
+    t = win32api.GetSystemMetrics(SM_YVIRTUALSCREEN)
 
-    # If server is running
-    if _status == True:
-        message = "Window was located.\n"
-        message += "Server is running.\n"
+    return w, h, l, t
 
-        # Get screen details
-        w, h, l, t = get_screen_resolution()
-
-        # Get window details
-        x1, y1, x2, y2 = bbox = win32gui.GetWindowRect(hwnd)
-        print("Console window bbox:", bbox)
-        monitor = determine_monitor(x1, x2, w, l)
-        
-
-        if "fullscreen" in args:
-            message += f"Console Window location: Monitor {monitor}.\n"
-            window_prepare_for_screenshot(hwnd)
-            sleep(0.2)
-        else:
-            message += f"Console Window location: {bbox}.\n"
-
-        try:
-            await screenshot(ctx=ctx, monitor=monitor, message=message) # Take and send screenshot
-            if "fullscreen" in args:
-                window_restore_from_pre_screenshot(hwnd) # Restore window position
-        except Exception as ex:
-            await ctx.send(content=f"{message}Could not send screenshot because of error: {ex}")
-
-    else:
-        await ctx.send(content=f"Server window could not be located. Server is not running")
-
-    return None
-
-def server_start(): # (TODO)
-    """Start the server if it is not running
-    """
-
-    print("Starting server...")
-
-    # open cmd
-    pyautogui.hotkey("win","r")
-    sleep(0.4)
-    pyautogui.typewrite("cmd\n")
-    sleep(0.5)
-
-
-    return None
-
-def server_save(): # (TODO)
-    """Save the world!
-        Send an image of the console after command has gone through
-    """
-    return None
-
-def server_stop(): # (TODO)
-    """Stop the server.
-        Should always call server_save() before stopping server
-    """
-    return None    
 
 def get_emote(emoji):
     """
@@ -386,17 +380,133 @@ def get_emote(emoji):
             eid = None
     return lookup, eid
 
-def get_screen_resolution():
-    SM_XVIRTUALSCREEN = 76
-    SM_YVIRTUALSCREEN = 77
-    SM_CXVIRTUALSCREEN = 78
-    SM_CYVIRTUALSCREEN = 79
-    vscreenwidth = win32api.GetSystemMetrics(SM_CXVIRTUALSCREEN)
-    vscreenheigth = win32api.GetSystemMetrics(SM_CYVIRTUALSCREEN)
-    vscreenx = win32api.GetSystemMetrics(SM_XVIRTUALSCREEN)
-    vscreeny = win32api.GetSystemMetrics(SM_YVIRTUALSCREEN)
 
-    return vscreenwidth, vscreenheigth, vscreenx, vscreeny
+def window_exists(window_name):
+    hwnd = get_hwnd(window_name=window_name)
+    exists = True if hwnd != None else False
+
+    return exists
+
+
+async def server_console(ctx, *args):
+    visible = False
+    if "stop" in args:
+        await ctx.send(content="Please use `>server stop` instead. Only admins can close the server")
+        return None
+
+    if "visible" in args[0]:
+        visible = True
+    
+    # Check if server is running
+    if window_exists(SERVER_WINDOW_NAME) is False:
+        logging.info("Server window could not be found")
+        await ctx.send(content="Cannot send console commands when the server is offline.")
+        return None
+
+    # Get window details
+    hwnd = get_hwnd(SERVER_WINDOW_NAME)
+    l, t, r, b = get_bbox_hwnd(hwnd)
+
+    if visible is False:
+        # Set window to foreground
+        window_set_foreground(hwnd)
+
+    # Take screenshot of console window
+    img = window_capture(hwnd, visible=visible)
+
+    # Click in the middle of the monitor
+    x = int(median([r, l]))
+    y = int(median([t, b]))
+    pyautogui.leftClick(x, y)
+
+    # Wait a little
+    sleep(0.5)
+
+    # Check if server has crashed
+    pyautogui.typewrite(" ") # This will completely close the window if something is wrong
+    sleep(0.5)
+
+    # Try again to locate window
+    try:
+        l, t, r, b = win32gui.GetWindowRect(hwnd)
+    except Exception as ex:
+        await ctx.send(
+            content=f"Server did not survive crashcheck. It likely crashed a while ago. Got error {ex}",
+            file=img)
+        return None
+    
+    # Start new line if server is still alive
+    pyautogui.typewrite("\n")
+    if visible is False:
+        for arg in args:
+            pyautogui.typewrite(str(arg) + " ")
+            sleep(0.1)
+    else:
+        for arg in args[1:]:
+            pyautogui.typewrite(str(arg) + " ")
+            sleep(0.1)
+
+    pyautogui.typewrite(['backspace'])
+
+    # Execute command
+    pyautogui.typewrite("\n")
+
+    sleep(1.5)
+    img = window_capture(hwnd, visible=visible)
+
+    # Tell user that commands went through
+    content = f"Successfully ran `{str().join([(str(arg)+' ') for arg in args])}`" if visible is False else f"Successfully ran `{str().join([(str(arg)+' ') for arg in args[1:]])}`"
+    await ctx.send(
+        content=content,
+        file=img
+    )
+  
+
+async def crashcheck(ctx):
+    crash = False
+
+    # Check if server is running
+    if window_exists(SERVER_WINDOW_NAME) is False:
+        logging.info("Server window could not be found")
+        await ctx.send(content="Cannot send console commands when the server is offline.")
+        return None
+
+    # Get window details
+    hwnd = get_hwnd(SERVER_WINDOW_NAME)
+    l, t, r, b = get_bbox_hwnd(hwnd)
+
+    # Set window to foreground
+    window_set_foreground(hwnd)
+
+    # Take screenshot of console window
+    img = window_capture(hwnd)
+
+    # Click in the middle of the monitor
+    x = int(median([r, l]))
+    y = int(median([t, b]))
+    pyautogui.leftClick(x, y)
+
+    # Wait a little
+    sleep(0.5)
+
+    # Check if server has crashed
+    pyautogui.typewrite(" ") # This will completely close the window if something is wrong
+    sleep(0.5)
+
+    # Try again to locate window
+    try:
+        l, t, r, b = win32gui.GetWindowRect(hwnd)
+    except Exception as ex:
+        crash = True
+        await ctx.send(
+            content=f"Server did not survive crashcheck. It likely crashed a while ago. Got error {ex}",
+            file=img)
+        return crash
+
+    # New line
+    pyautogui.typewrite("\n")
+    return crash
+    
 
 
 client.run(TOKEN)
