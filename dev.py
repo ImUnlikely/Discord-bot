@@ -14,38 +14,32 @@ from win32api import GetSystemMetrics
 import win32con
 import win32gui
 import win32ui
+from statistics import median
 
+
+# print(pyautogui.KEYBOARD_KEYS)
+# print(pyautogui.KEY_NAMES)
 
 toplist, winlist = [], []
 def enum_cb(hwnd, results):
     winlist.append((hwnd, win32gui.GetWindowText(hwnd)))
 win32gui.EnumWindows(enum_cb, toplist)
 
-server_window = [(hwnd, title) for hwnd, title in winlist if 'system32\cmd.exe' in title.lower()]
-if len(server_window) == 0:
-    print("Window not found")
-    exit()
+windows = [(hwnd, title) for hwnd, title in winlist if "notepad" in title.lower()]
 
-# Set window as foreground before screenshot
-hwnd = server_window[0][0]
-print(hwnd)
-win32gui.SetForegroundWindow(hwnd)
+hwnd = windows[0][0]
 
-# Get virtual screen
-hwnd = win32gui.GetDesktopWindow()
-hwndDC = win32gui.GetWindowDC(hwnd)
-mfcDC  = win32ui.CreateDCFromHandle(hwndDC)
-saveDC = mfcDC.CreateCompatibleDC()
 
-# Get coords and calculate width and height
-# startX, startY, endX, endY = bbox = win32gui.GetWindowRect(hwnd)
-# l = startX
-# t = startY
-# w = startX - endX
-# h = endY - startY
-# w = w*-1 if w<0 else w  # Convert to positive if negative
-# h = h*-1 if h<0 else h  # Convert to positive if negative
-
+# Get desktop window hwnd
+# hwnd = win32gui.GetDesktopWindow()
+# print(hwnd)
+ 
+# you can use this to capture only a specific window
+l, t, r, b = win32gui.GetWindowRect(hwnd)
+w = r - l
+h = b - t
+ 
+# get complete virtual screen including all monitors
 SM_XVIRTUALSCREEN = 76
 SM_YVIRTUALSCREEN = 77
 SM_CXVIRTUALSCREEN = 78
@@ -54,17 +48,23 @@ w = vscreenwidth = win32api.GetSystemMetrics(SM_CXVIRTUALSCREEN)
 h = vscreenheigth = win32api.GetSystemMetrics(SM_CYVIRTUALSCREEN)
 l = vscreenx = win32api.GetSystemMetrics(SM_XVIRTUALSCREEN)
 t = vscreeny = win32api.GetSystemMetrics(SM_YVIRTUALSCREEN)
-
-# Create bitmap
+r = l + w
+b = t + h
+ 
+print(l, t, r, b, ' -> ', w, h)
+ 
+hwndDC = win32gui.GetWindowDC(hwnd)
+mfcDC  = win32ui.CreateDCFromHandle(hwndDC)
+saveDC = mfcDC.CreateCompatibleDC()
+ 
 saveBitMap = win32ui.CreateBitmap()
 saveBitMap.CreateCompatibleBitmap(mfcDC, w, h)
 saveDC.SelectObject(saveBitMap)
 saveDC.BitBlt((0, 0), (w, h),  mfcDC,  (l, t),  win32con.SRCCOPY)
-
-# Save bitmap
 bmpinfo = saveBitMap.GetInfo()
 bmpstr = saveBitMap.GetBitmapBits(True)
 
 # Save image
 im = Image.frombuffer('RGB', (bmpinfo['bmWidth'], bmpinfo['bmHeight']), bmpstr, 'raw', 'BGRX', 0, 1)
 im.save('screencapture.png', format = 'png')
+
